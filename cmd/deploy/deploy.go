@@ -16,6 +16,7 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"github.com/okteto/okteto/pkg/benchmark"
 	"os"
 	"os/signal"
 	"time"
@@ -109,6 +110,8 @@ func NewDeployExternalK8sControl(cfg *rest.Config) ExternalResourceInterface {
 
 // Deploy deploys the okteto manifest
 func Deploy(ctx context.Context) *cobra.Command {
+	benchmark.StartTimer("1_Init")
+
 	options := &Options{}
 
 	cmd := &cobra.Command{
@@ -200,8 +203,14 @@ func Deploy(ctx context.Context) *cobra.Command {
 			signal.Notify(stop, os.Interrupt)
 			exit := make(chan error, 1)
 
+			benchmark.StopTimer("1_Init")
+			benchmark.PrintTimers()
+
 			go func() {
+				benchmark.StartTimer("2_RunDeploy")
 				err := c.RunDeploy(ctx, options)
+				benchmark.StopTimer("2_RunDeploy")
+				benchmark.PrintTimers()
 
 				deployType := "custom"
 				hasDependencySection := false
@@ -218,6 +227,7 @@ func Deploy(ctx context.Context) *cobra.Command {
 					hasBuildSection = options.Manifest.IsV2 && len(options.Manifest.Build) > 0
 				}
 
+				benchmark.StartTimer("3_Analytics")
 				analytics.TrackDeploy(analytics.TrackDeployMetadata{
 					Success:                err == nil,
 					IsOktetoRepo:           utils.IsOktetoRepo(),
@@ -228,6 +238,8 @@ func Deploy(ctx context.Context) *cobra.Command {
 					HasDependenciesSection: hasDependencySection,
 					HasBuildSection:        hasBuildSection,
 				})
+				benchmark.StopTimer("3_Analytics")
+				benchmark.PrintTimers()
 
 				exit <- err
 			}()
@@ -246,6 +258,7 @@ func Deploy(ctx context.Context) *cobra.Command {
 				deployer.cleanUp(ctx, oktetoErrors.ErrIntSig)
 				return oktetoErrors.ErrIntSig
 			case err := <-exit:
+
 				return err
 			}
 		},
@@ -269,12 +282,14 @@ func Deploy(ctx context.Context) *cobra.Command {
 
 // RunDeploy runs the deploy sequence
 func (dc *DeployCommand) RunDeploy(ctx context.Context, deployOptions *Options) error {
+	benchmark.StartTimer("4_LoadManifest")
 	oktetoLog.SetStage("Load manifest")
 	manifest, err := dc.GetManifest(deployOptions.ManifestPath)
 	if err != nil {
 		return err
 	}
 	deployOptions.Manifest = manifest
+	benchmark.StopTimer("4_LoadManifest")
 	oktetoLog.Debug("found okteto manifest")
 	dc.PipelineType = deployOptions.Manifest.Type
 
@@ -324,23 +339,29 @@ func (dc *DeployCommand) RunDeploy(ctx context.Context, deployOptions *Options) 
 
 	os.Setenv(constants.OktetoNameEnvVar, deployOptions.Name)
 
+	benchmark.StartTimer("5_deployDependencies")
 	if err := dc.deployDependencies(ctx, deployOptions); err != nil {
 		if errStatus := dc.CfgMapHandler.updateConfigMap(ctx, cfg, data, err); errStatus != nil {
 			return errStatus
 		}
 		return err
 	}
+	benchmark.StopTimer("5_deployDependencies")
 
+	benchmark.StartTimer("6_buildImages")
 	if err := buildImages(ctx, dc.Builder.Build, dc.Builder.GetServicesToBuild, deployOptions); err != nil {
 		return dc.CfgMapHandler.updateConfigMap(ctx, cfg, data, err)
 	}
+	benchmark.StopTimer("6_buildImages")
 
 	deployer, err := dc.GetDeployer(ctx, deployOptions.Manifest, deployOptions, cwd, dc.Builder)
 	if err != nil {
 		return err
 	}
 
+	benchmark.StartTimer("7_deploy")
 	err = deployer.deploy(ctx, deployOptions)
+	benchmark.StopTimer("7_deploy")
 	if err != nil {
 		if err == oktetoErrors.ErrIntSig {
 			return nil
