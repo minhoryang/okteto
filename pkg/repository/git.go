@@ -16,10 +16,9 @@ package repository
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"os/exec"
 )
 
 type gitRepoController struct {
@@ -33,30 +32,134 @@ func newGitRepoController() gitRepoController {
 	}
 }
 
+type CleanStatus struct {
+	IsClean bool
+	Err     error
+}
+
 // IsClean checks if the repository have changes over the commit
+//func (r gitRepoController) isClean(ctx context.Context) (bool, error) {
+//	ctxWithTimeout, cancel := context.WithTimeout(ctx, 1*time.Second)
+//	defer cancel()
+//
+//	ch := make(chan CleanStatus)
+//
+//	benchmark.StartTimer("4.5_before_isClean_status")
+//	repo, err := r.repoGetter.get(r.path)
+//	if err != nil {
+//		ch <- CleanStatus{
+//			IsClean: false,
+//			Err:     fmt.Errorf("failed to analyze git repo: %w", err),
+//		}
+//	}
+//	worktree, err := repo.Worktree()
+//	if err != nil {
+//		ch <- CleanStatus{
+//			IsClean: false,
+//			Err:     fmt.Errorf("failed to infer the git repo's current branch: %w", err),
+//		}
+//	}
+//	benchmark.StopTimer("4.5_before_isClean_status")
+//
+//	go func() {
+//		benchmark.StartTimer("4.5_isClean_status")
+//		status, err := worktree.Status()
+//		if err != nil {
+//			ch <- CleanStatus{
+//				IsClean: false,
+//				Err:     fmt.Errorf("failed to infer the git repo's status: %w", err),
+//			}
+//			return
+//		}
+//		benchmark.StopTimer("4.5_isClean_status")
+//
+//		ch <- CleanStatus{status.IsClean(), nil}
+//	}()
+//
+//	select {
+//	case <-ctxWithTimeout.Done():
+//		fmt.Println("RUNNING OUT OF TIME!!!")
+//		s, err := status(worktree)
+//		if err != nil {
+//			return false, fmt.Errorf("failed to infer the git repo's status: %w", err)
+//		}
+//		return s.IsClean(), ctxWithTimeout.Err()
+//	case res := <-ch:
+//		return res.IsClean, res.Err
+//	}
+//}
+
 func (r gitRepoController) isClean(ctx context.Context) (bool, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 1*time.Second)
-	defer cancel()
-	select {
-	case <-ctxWithTimeout.Done():
-		return false, nil
-	default:
-		repo, err := r.repoGetter.get(r.path)
-		if err != nil {
-			return false, fmt.Errorf("failed to analyze git repo: %w", err)
-		}
-		worktree, err := repo.Worktree()
-		if err != nil {
-			return false, fmt.Errorf("failed to infer the git repo's current branch: %w", err)
-		}
-
-		status, err := worktree.Status()
-		if err != nil {
-			return false, fmt.Errorf("failed to infer the git repo's status: %w", err)
-		}
-
-		return status.IsClean(), nil
+	repo, err := r.repoGetter.get(r.path)
+	if err != nil {
+		return false, fmt.Errorf("failed to analyze git repo: %w", err)
 	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		// TODO: fix msg
+		return false, fmt.Errorf("failed to analyze git repo: %w", err)
+	}
+
+	status, err := getGitStatus(worktree)
+	if err != nil {
+		// TODO: fix msg
+		return false, fmt.Errorf("failed to analyze git repo: %w", err)
+	}
+
+	fmt.Println(status)
+
+	return status.IsClean(), nil
+}
+
+// Alternative method to determine file status. Modified from original
+// version which was part of the following pull request.
+// https://github.com/zricethezav/gitleaks/pull/463
+func getGitStatus(wt gitWorktreeInterface) (gitStatusInterface, error) {
+	c := exec.Command("git", "status", "--porcelain", "-z")
+	c.Dir = wt.GetRoot()
+	out, err := c.Output()
+	if err != nil {
+		return gitStatusInterface{status: string(out)}, nil
+	}
+
+	//if len(out) == 0 {
+	//    return true, nil
+	//}
+	//lines := strings.Split(string(out), "\000")
+	//status := make(map[string]*git.FileStatus, len(lines))
+	//
+	//for _, line := range lines {
+	//	if len(line) == 0 {
+	//		continue
+	//	}
+	//
+	//	ltrim := strings.TrimLeft(line, " ")
+	//
+	//	pathStatusCode := strings.SplitN(ltrim, " ", 2)
+	//	if len(pathStatusCode) != 2 {
+	//		continue
+	//	}
+	//
+	//	statusCode := []byte(pathStatusCode[0])[0]
+	//	path := strings.Trim(pathStatusCode[1], " ")
+	//
+	//	status[path] = &git.FileStatus{
+	//		Staging: git.StatusCode(statusCode),
+	//	}
+	//}
+
+	return gitStatusInterface{status: string(out)}, nil
+}
+
+func (gs gitStatusInterface) IsClean() bool {
+	if len(gs.status) == 0 {
+		return true
+	}
+
+	// TODO: check lines
+
+	return false
 }
 
 // GetSHA returns the last commit sha of the repository
@@ -114,13 +217,26 @@ type oktetoGitWorktree struct {
 }
 
 func (ogr oktetoGitWorktree) Status() (gitStatusInterface, error) {
-	status, err := ogr.worktree.Status()
-	if err != nil {
-		return nil, err
-	}
-	return oktetoGitStatus{status: status}, nil
+	//status, err := ogr.worktree.Status()
+	//if err != nil {
+	//	return gitStatusInterface{}, err
+	//}
+	return gitStatusInterface{status: ""}, nil
 }
 
+//func (ogr oktetoGitWorktree) Filesystem() fsStatusInterface {
+//	return ogr.worktree.Filesystem
+//}
+
+func (ogr oktetoGitWorktree) GetRoot() string {
+	return ogr.worktree.Filesystem.Root()
+}
+
+//func (fs fsStatus) Root() string {
+//	return fs.Root()
+//}
+
+// TODO: remove?
 type oktetoGitStatus struct {
 	status git.Status
 }
@@ -135,7 +251,17 @@ type gitRepositoryInterface interface {
 }
 type gitWorktreeInterface interface {
 	Status() (gitStatusInterface, error)
+	GetRoot() string
 }
-type gitStatusInterface interface {
-	IsClean() bool
+type gitStatusInterface struct {
+	status string
 }
+
+//
+//type fsStatusInterface interface {
+//	Root() string
+//}
+
+//type fsStatus struct {
+//	text string
+//}

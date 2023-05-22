@@ -126,6 +126,7 @@ func mergeServicesToDeployFromOptionsAndManifest(deployOptions *Options) {
 }
 
 func (dc *DeployCommand) addEnvVars(ctx context.Context, cwd string) {
+	//benchmark.StartTimer("4.3_addEnvVars_OktetoGitBranchEnvVar")
 	if os.Getenv(constants.OktetoGitBranchEnvVar) == "" {
 		branch, err := utils.GetBranch(cwd)
 		if err != nil {
@@ -133,7 +134,9 @@ func (dc *DeployCommand) addEnvVars(ctx context.Context, cwd string) {
 		}
 		os.Setenv(constants.OktetoGitBranchEnvVar, branch)
 	}
+	//benchmark.StopTimer("4.3_addEnvVars_OktetoGitBranchEnvVar")
 
+	//benchmark.StartTimer("4.3_addEnvVars_GithubRepositoryEnvVar")
 	if os.Getenv(model.GithubRepositoryEnvVar) == "" {
 		repo, err := model.GetRepositoryURL(cwd)
 		if err != nil {
@@ -151,9 +154,12 @@ func (dc *DeployCommand) addEnvVars(ctx context.Context, cwd string) {
 		}
 		os.Setenv(model.GithubRepositoryEnvVar, repo)
 	}
+	//benchmark.StopTimer("4.3_addEnvVars_GithubRepositoryEnvVar")
 
+	//benchmark.StartTimer("4.3_addEnvVars_OktetoGitCommitEnvVar")
 	if os.Getenv(constants.OktetoGitCommitEnvVar) == "" {
-		sha, err := repository.NewRepository(cwd).GetSHA()
+		repo := repository.NewRepository(cwd)
+		sha, err := repo.GetSHA()
 		if err != nil {
 			oktetoLog.Infof("could not retrieve sha: %s", err)
 		}
@@ -169,6 +175,9 @@ func (dc *DeployCommand) addEnvVars(ctx context.Context, cwd string) {
 		}
 		os.Setenv(constants.OktetoGitCommitEnvVar, sha)
 	}
+	//benchmark.StopTimer("4.3_addEnvVars_OktetoGitCommitEnvVar")
+
+	//benchmark.StartTimer("4.3_addEnvVars_Misc")
 	if os.Getenv(model.OktetoRegistryURLEnvVar) == "" {
 		os.Setenv(model.OktetoRegistryURLEnvVar, okteto.Context().Registry)
 	}
@@ -178,7 +187,11 @@ func (dc *DeployCommand) addEnvVars(ctx context.Context, cwd string) {
 	if os.Getenv(model.OktetoTokenEnvVar) == "" {
 		os.Setenv(model.OktetoTokenEnvVar, okteto.Context().Token)
 	}
+	//benchmark.StopTimer("4.3_addEnvVars_Misc")
+	//
+	//benchmark.StartTimer("4.3_addEnvVars_AddMaskedWord")
 	oktetoLog.AddMaskedWord(os.Getenv(model.OktetoTokenEnvVar))
+	//benchmark.StopTimer("4.3_addEnvVars_AddMaskedWord")
 }
 
 func switchRepoSchemaToHTTPS(repo string) *url.URL {

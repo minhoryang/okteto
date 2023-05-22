@@ -16,6 +16,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"github.com/okteto/okteto/pkg/benchmark"
 	"strings"
 
 	oktetoErrors "github.com/okteto/okteto/pkg/errors"
@@ -56,6 +57,7 @@ func (bc *OktetoBuilder) GetServicesToBuild(ctx context.Context, manifest *model
 	// check if images are at registry (global or dev) and set envs or send to build
 	toBuild := make(chan string, len(svcToDeployMap))
 	g, _ := errgroup.WithContext(ctx)
+	benchmark.StartTimer("9_wrapper_checkServicesToBuild")
 	for service := range buildManifest {
 		if _, ok := svcToDeployMap[service]; !ok {
 			oktetoLog.Debug("Skipping service '%s' because it is not in the list of services to deploy", service)
@@ -67,6 +69,7 @@ func (bc *OktetoBuilder) GetServicesToBuild(ctx context.Context, manifest *model
 			return bc.checkServicesToBuild(svc, manifest, toBuild)
 		})
 	}
+	benchmark.StopTimer("9_wrapper_checkServicesToBuild")
 
 	if err := g.Wait(); err != nil {
 		return nil, err
@@ -92,6 +95,7 @@ func (bc *OktetoBuilder) GetServicesToBuild(ctx context.Context, manifest *model
 }
 
 func (bc *OktetoBuilder) checkServicesToBuild(service string, manifest *model.Manifest, ch chan string) error {
+	benchmark.StartTimer("10_checkServicesToBuild")
 	buildInfo := manifest.Build[service].Copy()
 	isStack := manifest.Type == model.StackType
 	if isStack && okteto.IsOkteto() && !bc.Registry.IsOktetoRegistry(buildInfo.Image) {
@@ -116,5 +120,6 @@ func (bc *OktetoBuilder) checkServicesToBuild(service string, manifest *model.Ma
 			stack.Services[service].Image = fmt.Sprintf("${OKTETO_BUILD_%s_IMAGE}", strings.ToUpper(strings.ReplaceAll(service, "-", "_")))
 		}
 	}
+	benchmark.StopTimer("10_checkServicesToBuild")
 	return nil
 }

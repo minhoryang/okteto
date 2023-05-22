@@ -204,13 +204,11 @@ func Deploy(ctx context.Context) *cobra.Command {
 			exit := make(chan error, 1)
 
 			benchmark.StopTimer("1_Init")
-			benchmark.PrintTimers()
 
 			go func() {
 				benchmark.StartTimer("2_RunDeploy")
 				err := c.RunDeploy(ctx, options)
 				benchmark.StopTimer("2_RunDeploy")
-				benchmark.PrintTimers()
 
 				deployType := "custom"
 				hasDependencySection := false
@@ -239,7 +237,6 @@ func Deploy(ctx context.Context) *cobra.Command {
 					HasBuildSection:        hasBuildSection,
 				})
 				benchmark.StopTimer("3_Analytics")
-				benchmark.PrintTimers()
 
 				exit <- err
 			}()
@@ -290,6 +287,8 @@ func (dc *DeployCommand) RunDeploy(ctx context.Context, deployOptions *Options) 
 	}
 	deployOptions.Manifest = manifest
 	benchmark.StopTimer("4_LoadManifest")
+
+	benchmark.StartTimer("4.1_AfterManifest_Getwd")
 	oktetoLog.Debug("found okteto manifest")
 	dc.PipelineType = deployOptions.Manifest.Type
 
@@ -304,19 +303,28 @@ func (dc *DeployCommand) RunDeploy(ctx context.Context, deployOptions *Options) 
 	if err != nil {
 		return fmt.Errorf("failed to get the current working directory: %w", err)
 	}
+	benchmark.StopTimer("4.1_AfterManifest_Getwd")
 
+	benchmark.StartTimer("4.1_AfterManifest_K8sClientProvider")
 	// We need to create a client that doesn't go through the proxy to create
 	// the configmap without the deployedByLabel
 	c, _, err := dc.K8sClientProvider.Provide(okteto.Context().Cfg)
 	if err != nil {
 		return err
 	}
-	dc.addEnvVars(ctx, cwd)
+	benchmark.StopTimer("4.1_AfterManifest_K8sClientProvider")
 
+	benchmark.StartTimer("4.1_AfterManifest_addEnvVars")
+	dc.addEnvVars(ctx, cwd)
+	benchmark.StopTimer("4.1_AfterManifest_addEnvVars")
+
+	benchmark.StartTimer("4.1_AfterManifest_setDeployOptionsValuesFromManifest")
 	if err := setDeployOptionsValuesFromManifest(ctx, deployOptions, cwd, c); err != nil {
 		return err
 	}
+	benchmark.StopTimer("4.1_AfterManifest_setDeployOptionsValuesFromManifest")
 
+	benchmark.StartTimer("4.1_AfterManifest_CfgData")
 	data := &pipeline.CfgData{
 		Name:       deployOptions.Name,
 		Namespace:  deployOptions.Manifest.Namespace,
@@ -331,11 +339,14 @@ func (dc *DeployCommand) RunDeploy(ctx context.Context, deployOptions *Options) 
 	if !deployOptions.Manifest.IsV2 && deployOptions.Manifest.Type == model.StackType {
 		data.Manifest = deployOptions.Manifest.Deploy.ComposeSection.Stack.Manifest
 	}
+	benchmark.StopTimer("4.1_AfterManifest_CfgData")
 
+	benchmark.StartTimer("4.1_AfterManifest_translateConfigMapAndDeploy")
 	cfg, err := dc.CfgMapHandler.translateConfigMapAndDeploy(ctx, data)
 	if err != nil {
 		return err
 	}
+	benchmark.StopTimer("4.1_AfterManifest_translateConfigMapAndDeploy")
 
 	os.Setenv(constants.OktetoNameEnvVar, deployOptions.Name)
 
