@@ -1,0 +1,5 @@
+{
+  "name": "Okteto CLI",
+  "image": "ghcr.io/mrsimonemms/devcontainers/full",
+  "postStartCommand": "make build"
+}
