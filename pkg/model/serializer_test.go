@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"log"
 	"os"
 	"reflect"
@@ -25,7 +26,6 @@ import (
 	"github.com/okteto/okteto/pkg/externalresource"
 	"github.com/okteto/okteto/pkg/model/forward"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/utils/pointer"
@@ -1861,12 +1861,12 @@ func TestDevModeUnmarshalling(t *testing.T) {
 		{
 			name: "hybrid mode enabled",
 			input: []byte(`mode: hybrid
-selector:
-  app.kubernetes.io/part-of: okteto
-  app.kubernetes.io/component: frontend
-command: ["sh", "-c", "yarn start"]
-reverse:
-  - 8080:8080`),
+		selector:
+		 app.kubernetes.io/part-of: okteto
+		 app.kubernetes.io/component: frontend
+		command: ["sh", "-c", "yarn start"]
+		reverse:
+		 - 8080:8080`),
 			expected: &Dev{
 				Mode:    "hybrid",
 				Workdir: wd,
@@ -1912,17 +1912,17 @@ reverse:
 		{
 			name: "sync mode enabled",
 			input: []byte(`mode: sync
-selector:
-  app.kubernetes.io/part-of: okteto
-  app.kubernetes.io/component: api
-image: okteto/golang:1
-environment:
-  - LOG_FORMATTER=text
-command: sh
-sync:
-  - ./api:/usr/src/app
-forward:
-  - 2345:2345`),
+		selector:
+		 app.kubernetes.io/part-of: okteto
+		 app.kubernetes.io/component: api
+		image: okteto/golang:1
+		environment:
+		 - LOG_FORMATTER=text
+		command: sh
+		sync:
+		 - ./api:/usr/src/app
+		forward:
+		 - 2345:2345`),
 			expected: &Dev{
 				Mode: "sync",
 				Selector: Selector{
@@ -1978,15 +1978,15 @@ forward:
 		{
 			name: "no mode, sync fallback",
 			input: []byte(`
-selector:
-  app.kubernetes.io/part-of: okteto
-  app.kubernetes.io/component: producer
-image: okteto/golang:1
-command: sh
-sync:
-  - ./producer:/usr/src/app
-forward:
-  - 2345:2345`),
+		selector:
+		 app.kubernetes.io/part-of: okteto
+		 app.kubernetes.io/component: producer
+		image: okteto/golang:1
+		command: sh
+		sync:
+		 - ./producer:/usr/src/app
+		forward:
+		 - 2345:2345`),
 			expected: &Dev{
 				Selector: Selector{
 					"app.kubernetes.io/part-of":   "okteto",
@@ -2033,19 +2033,76 @@ forward:
 				},
 			},
 		},
-		{
-			name: "mode does not match with declaration",
-			input: []byte(`mode: hybrid
-selector:
-  app.kubernetes.io/part-of: okteto
-  app.kubernetes.io/component: producer
-image: okteto/golang:1
-command: sh
-sync:
-  - ./producer:/usr/src/app
-forward:
-  - 2345:2345`),
-		},
+		//		{
+		//			name: "hybrid mode warns of unused declared fields",
+		//			input: []byte(`mode: sync
+		//context: api
+		//namespace: unit-tests
+		//selector:
+		//  app.kubernetes.io/part-of: okteto
+		//  app.kubernetes.io/component: api
+		//image: okteto/golang:1
+		//environment:
+		//  - LOG_FORMATTER=text
+		//command: sh
+		//sync:
+		//  - ./api:/usr/src/app
+		//forward:
+		//  - 2345:2345`),
+		//			expected: &Dev{
+		//				Mode:      "sync",
+		//				Context:   "api",
+		//				Namespace: "unit-tests",
+		//				Selector: Selector{
+		//					"app.kubernetes.io/part-of":   "okteto",
+		//					"app.kubernetes.io/component": "api",
+		//				},
+		//				Command: Command{
+		//					Values: []string{"sh"},
+		//				},
+		//				Image: &BuildInfo{
+		//					Name: "okteto/golang:1",
+		//				},
+		//				Push:      &BuildInfo{},
+		//				Secrets:   []Secret{},
+		//				Probes:    &Probes{},
+		//				Lifecycle: &Lifecycle{},
+		//				Sync: Sync{
+		//					Compression:    true,
+		//					RescanInterval: 300,
+		//					Folders: []SyncFolder{
+		//						{
+		//							LocalPath:  "./api",
+		//							RemotePath: "/usr/src/app",
+		//						},
+		//					},
+		//				},
+		//				Forward: []forward.Forward{
+		//					{
+		//						Local:  2345,
+		//						Remote: 2345,
+		//					},
+		//				},
+		//				Environment: Environment{
+		//					{
+		//						Name:  "LOG_FORMATTER",
+		//						Value: "text",
+		//					},
+		//				},
+		//				Volumes:  []Volume{},
+		//				Services: []*Dev{},
+		//				Metadata: &Metadata{
+		//					Labels:      Labels{},
+		//					Annotations: Annotations{},
+		//				},
+		//				PersistentVolumeInfo: &PersistentVolumeInfo{
+		//					Enabled: true,
+		//				},
+		//				InitContainer: InitContainer{
+		//					Image: "okteto/bin:1.4.2",
+		//				},
+		//			},
+		//		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

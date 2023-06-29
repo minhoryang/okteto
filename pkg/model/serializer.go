@@ -734,6 +734,29 @@ func (d *Dev) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	err := unmarshal(mode)
 	if err != nil {
 		if mode.Mode == constants.OktetoHybridModeFieldValue {
+			hybridUnsupportedFields := []string{
+				"affinity",
+				"context",
+				"externalVolumes",
+				"image",
+				"imagePullPolicy",
+				"initContainer",
+				"initFromImage",
+				"lifecycle",
+				"namespace",
+				"nodeSelector",
+				"persistentVolume",
+				"push",
+				"replicas",
+				"secrets",
+				"securityContext",
+				"serviceAccount",
+				"sshServerPort",
+				"sync",
+				"tolerations",
+				"volumes",
+			}
+
 			type hybridModeInfo struct {
 				Workdir     string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 				Selector    Selector          `json:"selector,omitempty" yaml:"selector,omitempty"`
@@ -742,12 +765,20 @@ func (d *Dev) UnmarshalYAML(unmarshal func(interface{}) error) error {
 				Command     Command           `json:"command,omitempty" yaml:"command,omitempty"`
 				Reverse     []Reverse         `json:"reverse,omitempty" yaml:"reverse,omitempty"`
 				Mode        string            `json:"mode,omitempty" yaml:"mode,omitempty"`
+
+				UnsupportedFields map[string]interface{} `yaml:",inline" json:"-"`
 			}
 
 			hybridModeDev := &hybridModeInfo{}
 			err := unmarshal(hybridModeDev)
 			if err != nil {
 				return err
+			}
+
+			for _, field := range hybridUnsupportedFields {
+				if hybridModeDev.UnsupportedFields[field] != nil {
+					oktetoLog.Warning("In hybrid mode, the field '%s' specified in your manifest is ignored", field)
+				}
 			}
 		}
 	}
