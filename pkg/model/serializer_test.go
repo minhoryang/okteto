@@ -2033,76 +2033,6 @@ func TestDevModeUnmarshalling(t *testing.T) {
 				},
 			},
 		},
-		//		{
-		//			name: "hybrid mode warns of unused declared fields",
-		//			input: []byte(`mode: sync
-		//context: api
-		//namespace: unit-tests
-		//selector:
-		//  app.kubernetes.io/part-of: okteto
-		//  app.kubernetes.io/component: api
-		//image: okteto/golang:1
-		//environment:
-		//  - LOG_FORMATTER=text
-		//command: sh
-		//sync:
-		//  - ./api:/usr/src/app
-		//forward:
-		//  - 2345:2345`),
-		//			expected: &Dev{
-		//				Mode:      "sync",
-		//				Context:   "api",
-		//				Namespace: "unit-tests",
-		//				Selector: Selector{
-		//					"app.kubernetes.io/part-of":   "okteto",
-		//					"app.kubernetes.io/component": "api",
-		//				},
-		//				Command: Command{
-		//					Values: []string{"sh"},
-		//				},
-		//				Image: &BuildInfo{
-		//					Name: "okteto/golang:1",
-		//				},
-		//				Push:      &BuildInfo{},
-		//				Secrets:   []Secret{},
-		//				Probes:    &Probes{},
-		//				Lifecycle: &Lifecycle{},
-		//				Sync: Sync{
-		//					Compression:    true,
-		//					RescanInterval: 300,
-		//					Folders: []SyncFolder{
-		//						{
-		//							LocalPath:  "./api",
-		//							RemotePath: "/usr/src/app",
-		//						},
-		//					},
-		//				},
-		//				Forward: []forward.Forward{
-		//					{
-		//						Local:  2345,
-		//						Remote: 2345,
-		//					},
-		//				},
-		//				Environment: Environment{
-		//					{
-		//						Name:  "LOG_FORMATTER",
-		//						Value: "text",
-		//					},
-		//				},
-		//				Volumes:  []Volume{},
-		//				Services: []*Dev{},
-		//				Metadata: &Metadata{
-		//					Labels:      Labels{},
-		//					Annotations: Annotations{},
-		//				},
-		//				PersistentVolumeInfo: &PersistentVolumeInfo{
-		//					Enabled: true,
-		//				},
-		//				InitContainer: InitContainer{
-		//					Image: "okteto/bin:1.4.2",
-		//				},
-		//			},
-		//		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2116,6 +2046,42 @@ func TestDevModeUnmarshalling(t *testing.T) {
 			} else {
 				assert.Error(t, err)
 			}
+		})
+	}
+}
+
+func TestWarnHybridUnsupportedFields(t *testing.T) {
+	tests := []struct {
+		name              string
+		unsupportedFields map[string]interface{}
+		expected          string
+	}{
+		{
+			name:              "All fields are supported",
+			unsupportedFields: map[string]interface{}{"workdir": "/test", "mode": "hybrid", "command": "test"},
+			expected:          "",
+		},
+		{
+			name:              "All fields are unsupported",
+			unsupportedFields: map[string]interface{}{"replicas": 2, "context": "test", "namespace": "test"},
+			expected:          "In hybrid mode, the field(s) 'replicas, context, namespace' specified in your manifest are ignored",
+		},
+		{
+			name:              "Some fields are unsupported",
+			unsupportedFields: map[string]interface{}{"mode": "hybrid", "command": "test", "context": "test"},
+			expected:          "In hybrid mode, the field(s) 'context' specified in your manifest are ignored",
+		},
+		{
+			name:              "No fields",
+			unsupportedFields: map[string]interface{}{},
+			expected:          "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := warnHybridUnsupportedFields(tt.unsupportedFields)
+			assert.Equal(t, tt.expected, output)
 		})
 	}
 }

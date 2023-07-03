@@ -722,6 +722,49 @@ func checkFileAndNotDirectory(path string) error {
 	return fmt.Errorf("Secret '%s' is not a regular file", path)
 }
 
+func warnHybridUnsupportedFields(unsupportedFields map[string]interface{}) string {
+	var output string
+
+	hybridUnsupportedFields := []string{
+		"affinity",
+		"context",
+		"externalVolumes",
+		"image",
+		"imagePullPolicy",
+		"initContainer",
+		"initFromImage",
+		"lifecycle",
+		"namespace",
+		"nodeSelector",
+		"persistentVolume",
+		"push",
+		"replicas",
+		"secrets",
+		"securityContext",
+		"serviceAccount",
+		"sshServerPort",
+		"sync",
+		"tolerations",
+		"volumes",
+	}
+
+	var unsupportedFieldsUsed []string
+	for key := range unsupportedFields {
+		for _, unsupportedFieldName := range hybridUnsupportedFields {
+			if key == unsupportedFieldName {
+				unsupportedFieldsUsed = append(unsupportedFieldsUsed, key)
+				break
+			}
+		}
+	}
+
+	if len(unsupportedFieldsUsed) > 0 {
+		output = fmt.Sprintf("In hybrid mode, the field(s) '%s' specified in your manifest are ignored", strings.Join(unsupportedFieldsUsed, ", "))
+	}
+
+	return output
+}
+
 func (d *Dev) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type devType Dev // Prevent recursion
 	dev := devType(*d)
@@ -752,41 +795,9 @@ func (d *Dev) UnmarshalYAML(unmarshal func(interface{}) error) error {
 				return err
 			}
 
-			hybridUnsupportedFields := []string{
-				"affinity",
-				"context",
-				"externalVolumes",
-				"image",
-				"imagePullPolicy",
-				"initContainer",
-				"initFromImage",
-				"lifecycle",
-				"namespace",
-				"nodeSelector",
-				"persistentVolume",
-				"push",
-				"replicas",
-				"secrets",
-				"securityContext",
-				"serviceAccount",
-				"sshServerPort",
-				"sync",
-				"tolerations",
-				"volumes",
-			}
-
-			for key := range hybridModeDev.UnsupportedFields {
-				isSupported := true
-				for _, unsupportedFieldName := range hybridUnsupportedFields {
-					if key == unsupportedFieldName {
-						isSupported = false
-						break
-					}
-				}
-
-				if !isSupported {
-					oktetoLog.Warning("In hybrid mode, the field '%s' specified in your manifest is ignored", key)
-				}
+			warningMsg := warnHybridUnsupportedFields(hybridModeDev.UnsupportedFields)
+			if warningMsg != "" {
+				oktetoLog.Warning(warningMsg)
 			}
 		}
 	}
