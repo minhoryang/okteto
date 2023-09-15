@@ -35,6 +35,7 @@ import (
 	"github.com/okteto/okteto/pkg/okteto"
 	"github.com/okteto/okteto/pkg/types"
 	"github.com/spf13/cobra"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // oktetoClientProvider provides an okteto client ready to use or fail
@@ -278,6 +279,10 @@ func (c *ContextCommand) initOktetoContext(ctx context.Context, ctxOptions *Cont
 		cfg = kubeconfig.Create()
 	}
 	okteto.AddOktetoCredentialsToCfg(cfg, &userContext.Credentials, ctxOptions.Namespace, userContext.User.ID, okteto.Context().Name)
+
+	// TBC @jpf-okteto
+	applyServerNameOverrideToKubeconfig(userContext, okteto.Config{}, cfg, okteto.UrlToKubernetesContext(okteto.Context().Name))
+
 	okteto.Context().Cfg = cfg
 	okteto.Context().IsOkteto = true
 	okteto.Context().IsInsecure = okteto.IsInsecureSkipTLSVerifyPolicy()
@@ -317,6 +322,45 @@ func replaceCredentialsTokenWithDynamicKubetoken(okClientProvider oktetoClientPr
 	}
 
 	userContext.Credentials.Token = kubetoken.Status.Token
+}
+
+type serverNameOverrideGetter interface {
+	GetServerNameOverride() string
+}
+
+func applyServerNameOverrideToKubeconfig(userContext *types.UserContext, oktetoConfig serverNameOverrideGetter, cfg *clientcmdapi.Config, kubeContextName string) {
+
+	kubeUrl := strings.TrimPrefix(userContext.Credentials.Server, "https://")
+
+	registryUrl := userContext.User.Registry
+
+	instanceSubdomain := strings.TrimPrefix(registryUrl, "registry.")
+
+	if strings.TrimPrefix(kubeUrl, "kubernetes.") == instanceSubdomain {
+		fmt.Println("kubernetes url")
+	} else {
+		fmt.Println("non kubernetes url")
+		return
+	}
+
+	serverNameOverride := oktetoConfig.GetServerNameOverride()
+
+	if serverNameOverride == "" {
+		fmt.Println("no serverNameOverride")
+		return
+	}
+
+	clusterConfig, ok := cfg.Clusters[kubeContextName]
+
+	if !ok || clusterConfig == nil {
+		oktetoLog.Fatalf("apply servername override to kubeconfig: clusterConfig not found or nil")
+		return
+	}
+
+	clusterConfig.TLSServerName = kubeUrl
+	clusterConfig.Server = fmt.Sprintf("https://%s", serverNameOverride)
+	clusterConfig.CertificateAuthority = ""
+	clusterConfig.CertificateAuthorityData = nil
 }
 
 func getLoggedUserContext(ctx context.Context, c *ContextCommand, ctxOptions *ContextOptions) (*types.UserContext, error) {
