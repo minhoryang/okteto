@@ -19,7 +19,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/okteto/okteto/pkg/config"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -27,11 +26,12 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/okteto/okteto/pkg/config"
+
 	"github.com/mitchellh/go-homedir"
 
 	builder "github.com/okteto/okteto/cmd/build"
 	remoteBuild "github.com/okteto/okteto/cmd/build/remote"
-	buildv2 "github.com/okteto/okteto/cmd/build/v2"
 	"github.com/okteto/okteto/pkg/cmd/build"
 	"github.com/okteto/okteto/pkg/constants"
 	oktetoErrors "github.com/okteto/okteto/pkg/errors"
@@ -116,7 +116,7 @@ type remoteDeployCommand struct {
 }
 
 // newRemoteDeployer creates the remote deployer from a
-func newRemoteDeployer(builder *buildv2.OktetoBuilder) *remoteDeployCommand {
+func newRemoteDeployer(builder builderInterface) *remoteDeployCommand {
 	fs := afero.NewOsFs()
 	return &remoteDeployCommand{
 		getBuildEnvVars:      builder.GetBuildEnvVars,
